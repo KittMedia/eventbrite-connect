@@ -100,6 +100,8 @@ class Eventbrite_Connect {
 		foreach ( $events->events as &$event ) {
 			// get ticket information
 			$event = $this->get_event_information( $event, 'ticket_availability' );
+			// get venue information
+			$event = $this->get_event_information( $event, 'venue' );
 			$post_args = [
 				'post_title' => $event->name->text,
 				'post_status' => 'publish',
@@ -107,14 +109,15 @@ class Eventbrite_Connect {
 				// 'post_status' => ( $event->status !== 'draft' ? 'publish' : 'draft' ),
 				'post_type' => 'events',
 				'meta_input' => [
+					'eventbrite_event_address' => $event->venue->address->localized_address_display,
 					// TODO: Store locally
 					'eventbrite_event_cover' => $event->logo->url,
-					'eventbrite_event_datetime_end' => \date( 'd.m.Y H:i', \strtotime( $event->end->local ) ),
-					'eventbrite_event_datetime_start' => \date( 'd.m.Y H:i', \strtotime( $event->start->local ) ),
+					'eventbrite_event_location_name' => $event->venue->name,
 					'eventbrite_event_is_free' => $event->is_free,
 					'eventbrite_event_price_max' => $event->ticket_availability->maximum_ticket_price->major_value,
 					'eventbrite_event_price_min' => $event->ticket_availability->minimum_ticket_price->major_value,
 					'eventbrite_event_price_currency' => $event->currency,
+					'eventbrite_event_time' => \date( 'H:i', \strtotime( $event->start->local ) ) . ' – ' . \date( 'H:i', \strtotime( $event->end->local ) ),
 					'eventbrite_event_timestamp' => \strtotime( $event->start->local ),
 					'eventbrite_event_url' => $event->url,
 				],
@@ -123,10 +126,15 @@ class Eventbrite_Connect {
 			// add post
 			$post_id = \wp_insert_post( $post_args );
 		}
-		
-		die( '<pre>' . print_r( $events, true ) );
 	}
 	
+	/**
+	 * Get specific additional information of an event.
+	 * 
+	 * @param	object		$event The event
+	 * @param	string		$information The additional information
+	 * @return	object The updated event object
+	 */
 	private function get_event_information( $event, $information = '' ) {
 		$url = 'https://www.eventbriteapi.com/v3/events/' . $event->id . '/' . ( $information ? '?expand=' . $information : '' );
 		$event_information = $this->request( $url );
@@ -134,8 +142,9 @@ class Eventbrite_Connect {
 		// stop here if there is no additional event information
 		if ( $event_information === false ) return $event;
 		
-		// the API contains the full event object with the additional information
-		return $event_information;
+		$event = (object) \array_merge( (array) $event, (array) $event_information );
+		
+		return $event;
 	}
 	
 	/**
@@ -198,30 +207,36 @@ class Eventbrite_Connect {
 	public function register_post_meta() {
 		\register_post_meta(
 			'events',
+			'eventbrite_event_address',
+			[
+				'type' => 'string',
+				'single' => true,
+				'show_in_rest' => true,
+			]
+		);
+		\register_post_meta(
+			'events',
 			'eventbrite_event_cover',
 			[
 				'type' => 'string',
-				'description' => __( '', 'eventbrite-connect' ), // TODO: Add description
 				'single' => true,
 				'show_in_rest' => true,
 			]
 		);
 		\register_post_meta(
 			'events',
-			'eventbrite_event_datetime_end',
+			'eventbrite_event_location_name',
 			[
 				'type' => 'string',
-				'description' => __( '', 'eventbrite-connect' ), // TODO: Add description
 				'single' => true,
 				'show_in_rest' => true,
 			]
 		);
 		\register_post_meta(
 			'events',
-			'eventbrite_event_datetime_start',
+			'eventbrite_event_time',
 			[
 				'type' => 'string',
-				'description' => __( '', 'eventbrite-connect' ), // TODO: Add description
 				'single' => true,
 				'show_in_rest' => true,
 			]
@@ -231,7 +246,6 @@ class Eventbrite_Connect {
 			'eventbrite_event_is_free',
 			[
 				'type' => 'boolean',
-				'description' => __( '', 'eventbrite-connect' ), // TODO: Add description
 				'single' => true,
 				'show_in_rest' => true,
 			]
@@ -241,7 +255,6 @@ class Eventbrite_Connect {
 			'eventbrite_event_price_max',
 			[
 				'type' => 'float',
-				'description' => __( '', 'eventbrite-connect' ), // TODO: Add description
 				'single' => true,
 				'show_in_rest' => true,
 			]
@@ -251,7 +264,6 @@ class Eventbrite_Connect {
 			'eventbrite_event_price_min',
 			[
 				'type' => 'float',
-				'description' => __( '', 'eventbrite-connect' ), // TODO: Add description
 				'single' => true,
 				'show_in_rest' => true,
 			]
@@ -261,7 +273,6 @@ class Eventbrite_Connect {
 			'eventbrite_event_price_currency',
 			[
 				'type' => 'string',
-				'description' => __( '', 'eventbrite-connect' ), // TODO: Add description
 				'single' => true,
 				'show_in_rest' => true,
 			]
@@ -271,7 +282,6 @@ class Eventbrite_Connect {
 			'eventbrite_event_timestamp',
 			[
 				'type' => 'integer',
-				'description' => __( '', 'eventbrite-connect' ), // TODO: Add description
 				'single' => true,
 				'show_in_rest' => true,
 			]
@@ -281,7 +291,6 @@ class Eventbrite_Connect {
 			'eventbrite_event_url',
 			[
 				'type' => 'string',
-				'description' => __( '', 'eventbrite-connect' ), // TODO: Add description
 				'single' => true,
 				'show_in_rest' => true,
 			]
