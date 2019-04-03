@@ -1,0 +1,27 @@
+variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+
+before_script:
+    - git clone --branch=master --depth=1 --quiet git@git.kittmedia.com:wordpress/deploy-script.git
+    - chmod +x deploy-script/*.sh
+
+stages:
+    - staging
+    - production
+
+upload_live:
+    stage: production
+
+    script:
+        - cd deploy-script
+        - ./deploy.sh -u $SSH_USER_PRODUCTION -d $DEPLOY_PATH -h $DEPLOY_SERVER --theme
+
+    only:
+        - master
+
+    variables:
+        DEPLOY_PATH: /home/cosi.work/wp-content/plugins/eventbrite-connect
+        DEPLOY_SERVER: kenobi.kittmedia.com
+
+        # GitLab project variables:
+        # - SSH_USER_PRODUCTION
