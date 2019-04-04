@@ -83,7 +83,8 @@ class Eventbrite_Connect {
 				LEFT JOIN	" . $wpdb->prefix . "postmeta AS meta
 				ON			meta.post_id = post.ID
 				WHERE		post.post_type = 'events'";
-		$result = $wpdb->query( $sql );
+		
+		$wpdb->query( $sql );
 	}
 	
 	/**
@@ -126,7 +127,7 @@ class Eventbrite_Connect {
 			];
 			
 			// add post
-			$post_id = \wp_insert_post( $post_args );
+			\wp_insert_post( $post_args );
 		}
 	}
 	
@@ -167,6 +168,10 @@ class Eventbrite_Connect {
 	 * @return	array|false
 	 */
 	private function request( $url ) {
+		if ( ! defined( 'EVENTBRITE_CONNECT_TOKEN' ) ) {
+			return false;
+		}
+		
 		$request = \wp_remote_get( $url, [
 			'headers' => [
 				'Authorization' => 'Bearer ' . \EVENTBRITE_CONNECT_TOKEN,
@@ -196,7 +201,7 @@ class Eventbrite_Connect {
 	 * @param	string		$string
 	 * @return	bool
 	 */
-	protected static function is_json( string $string ) {
+	protected static function is_json( $string ) {
 		if ( ! \is_string( $string ) ) return false;
 		
 		\json_decode( $string );
