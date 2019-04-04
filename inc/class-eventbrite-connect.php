@@ -39,6 +39,8 @@ class Eventbrite_Connect {
 		// register post type
 		\add_action( 'init', [ $this, 'register_post_type' ] );
 		\add_action( 'init', [ $this, 'register_post_meta' ] );
+		// shortcode
+		\add_shortcode( 'eventbrite_connect', [ $this, 'add_shortcode' ] );
 	}
 	
 	/**
@@ -321,5 +323,31 @@ class Eventbrite_Connect {
 		];
 		
 		\register_post_type( 'events', $post_type_args );
+	}
+	
+	/**
+	 * Eventbrite Connect shortcode.
+	 * 
+	 * @return	false|string The shortcode content
+	 */
+	public function add_shortcode() {
+		$args = [
+			'posts_per_page' => 20,
+			'post_status' => 'publish',
+			'post_type' => 'events',
+		];
+		$query = new \WP_Query( $args );
+		
+		\ob_start();
+		echo '<div class="eventbrite-connect-container">';
+		
+		while ( $query->have_posts() ) {
+			$query->the_post();
+			\get_template_part('template-parts/content', 'events' );
+		}
+		
+		echo '</div>';
+		
+		return \ob_get_clean();
 	}
 }
