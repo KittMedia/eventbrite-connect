@@ -309,11 +309,9 @@ class Eventbrite_Connect {
 				'singular_name' => \esc_html__( 'Eventbrite event', 'eventbrite-connect' ),
 				'menu_name' => \esc_html__( 'Eventbrite events', 'eventbrite-connect' ),
 			],
-			'public' => true,
+			'public' => false,
 			'show_ui' => false,
-			'publicly_queryable' => true,
 			'show_in_rest' => true,
-			'has_archive' => true,
 			'supports' => [
 				'title',
 				'custom-fields',
@@ -332,6 +330,7 @@ class Eventbrite_Connect {
 	 */
 	public function add_shortcode() {
 		$args = [
+			'order' => 'ASC',
 			'posts_per_page' => 20,
 			'post_status' => 'publish',
 			'post_type' => 'events',
