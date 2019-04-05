@@ -91,14 +91,14 @@ class Eventbrite_Connect {
 	 * Get new events regularly.
 	 */
 	public function event_hourly_cron() {
-		// delete old events
-		$this->delete_events();
-		
 		// get new events
 		$events = $this->get_events();
 		
 		// stop if there are no events
 		if ( $events === false ) return;
+		
+		// delete old events
+		$this->delete_events();
 		
 		foreach ( $events->events as &$event ) {
 			// get ticket information
