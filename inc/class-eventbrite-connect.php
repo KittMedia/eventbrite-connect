@@ -105,6 +105,23 @@ class Eventbrite_Connect {
 			$event = $this->get_event_information( $event, 'ticket_availability' );
 			// get venue information
 			$event = $this->get_event_information( $event, 'venue' );
+			// sorting default
+			$sorting = 99;
+			
+			// get sorting
+			if ( \strpos( $event->name->text, 'Frühlingsreihe' ) !== false ) {
+				$sorting = 1;
+			}
+			else if ( \strpos( $event->name->text, 'Sommerreihe' ) !== false ) {
+				$sorting = 2;
+			}
+			else if ( \strpos( $event->name->text, 'Pfingstreihe' ) !== false ) {
+				$sorting = 3;
+			}
+			else if ( \strpos( $event->name->text, 'Gesamte Terminreihe' ) !== false ) {
+				$sorting = 4;
+			}
+			
 			$post_args = [
 				'post_title' => $event->name->text,
 				'post_status' => 'publish',
@@ -120,6 +137,7 @@ class Eventbrite_Connect {
 					'eventbrite_event_price_max' => $event->ticket_availability->maximum_ticket_price->major_value,
 					'eventbrite_event_price_min' => $event->ticket_availability->minimum_ticket_price->major_value,
 					'eventbrite_event_price_currency' => $event->currency,
+					'eventbrite_event_sorting' => $sorting,
 					'eventbrite_event_time' => \date( 'H:i', \strtotime( $event->start->local ) ) . ' – ' . \date( 'H:i', \strtotime( $event->end->local ) ),
 					'eventbrite_event_timestamp' => \strtotime( $event->start->local ),
 					'eventbrite_event_url' => $event->url,
@@ -286,6 +304,15 @@ class Eventbrite_Connect {
 		);
 		\register_post_meta(
 			'events',
+			'eventbrite_event_sorting',
+			[
+				'type' => 'integer',
+				'single' => true,
+				'show_in_rest' => true,
+			]
+		);
+		\register_post_meta(
+			'events',
 			'eventbrite_event_timestamp',
 			[
 				'type' => 'integer',
@@ -335,7 +362,12 @@ class Eventbrite_Connect {
 	 */
 	public function add_shortcode() {
 		$args = [
+			'meta_key' => 'eventbrite_event_sorting',
 			'order' => 'ASC',
+			'orderby' => [
+				'eventbrite_event_sorting' => 'ASC',
+				'eventbrite_event_timestamp' => 'ASC',
+			],
 			'posts_per_page' => 20,
 			'post_status' => 'publish',
 			'post_type' => 'events',
