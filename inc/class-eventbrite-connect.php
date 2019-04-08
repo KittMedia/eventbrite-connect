@@ -76,6 +76,20 @@ class Eventbrite_Connect {
 	private function delete_events() {
 		global $wpdb;
 		
+		// delete all cover images
+		$sql = "SELECT		meta_value
+				FROM		" . $wpdb->prefix . "postmeta AS meta
+				WHERE		meta.meta_key = 'eventbrite_event_cover'";
+		$results = $wpdb->get_results( $sql );
+		
+		foreach ( $results as $result ) {
+			if ( ! isset( $result->meta_value ) ) continue;
+			
+			$image_data = @\unserialize( $result->meta_value );
+			// delete the actual file
+			\unlink( $image_data['file'] );
+		}
+		
 		// delete all posts by post type
 		$sql = "DELETE		post,
 							meta
@@ -97,41 +111,56 @@ class Eventbrite_Connect {
 		// stop if there are no events
 		if ( $events === false ) return;
 		
-		// delete old events
-		$this->delete_events();
-		
+		// get additional information before deleting old events
 		foreach ( $events->events as &$event ) {
 			// get ticket information
 			$event = $this->get_event_information( $event, 'ticket_availability' );
 			// get venue information
 			$event = $this->get_event_information( $event, 'venue' );
+		}
+		
+		// delete old events
+		$this->delete_events();
+		
+		// insert events as custom post type
+		foreach ( $events->events as &$event ) {
+			// store cover image
+			$upload_file = \wp_upload_bits( $event->id . '.jpg', null, \file_get_contents( $event->logo->url ) );
+			$event->_wp_cover = $upload_file;
+			
 			// sorting default
 			$sorting = 99;
 			
 			// get sorting
-			if ( \strpos( $event->name->text, 'Frühlingsreihe' ) !== false ) {
+			if ( \strpos( $event->name->text, 'Gesamte' ) !== false ) {
+				if ( \strpos( $event->name->text, 'Frühlingsreihe' ) !== false ) {
+					$sorting = 5;
+				}
+				else if ( \strpos( $event->name->text, 'Pfingstreihe' ) !== false ) {
+					$sorting = 6;
+				}
+				else if ( \strpos( $event->name->text, 'Sommerreihe' ) !== false ) {
+					$sorting = 7;
+				}
+			}
+			else if ( \strpos( $event->name->text, 'Frühlingsreihe' ) !== false ) {
 				$sorting = 1;
 			}
-			else if ( \strpos( $event->name->text, 'Sommerreihe' ) !== false ) {
+			else if ( \strpos( $event->name->text, 'Pfingstreihe' ) !== false ) {
 				$sorting = 2;
 			}
-			else if ( \strpos( $event->name->text, 'Pfingstreihe' ) !== false ) {
+			else if ( \strpos( $event->name->text, 'Sommerreihe' ) !== false ) {
 				$sorting = 3;
-			}
-			else if ( \strpos( $event->name->text, 'Gesamte Terminreihe' ) !== false ) {
-				$sorting = 4;
 			}
 			
 			$post_args = [
 				'post_title' => $event->name->text,
 				'post_status' => 'publish',
-				// TODO: Enable
-				// 'post_status' => ( $event->status !== 'draft' ? 'publish' : 'draft' ),
+				'post_status' => ( $event->status === 'live' ? 'publish' : 'draft' ),
 				'post_type' => 'events',
 				'meta_input' => [
 					'eventbrite_event_address' => $event->venue->address->localized_address_display,
-					// TODO: Store locally
-					'eventbrite_event_cover' => $event->logo->url,
+					'eventbrite_event_cover' => $event->_wp_cover,
 					'eventbrite_event_location_name' => $event->venue->name,
 					'eventbrite_event_is_free' => $event->is_free,
 					'eventbrite_event_price_max' => $event->ticket_availability->maximum_ticket_price->major_value,
