@@ -7,7 +7,7 @@ namespace KittMedia\Eventbrite_Connect;
  * @author		KittMedia
  * @license		GPL2
  * @package		KittMedia\Eventbrite_Connect;
- * @version		0.1
+ * @version		1.0.0
  */
 class Eventbrite_Connect {
 	/**
