@@ -6,8 +6,6 @@ namespace KittMedia\Eventbrite_Connect;
  * 
  * @author		KittMedia
  * @license		GPL2
- * @package		KittMedia\Eventbrite_Connect;
- * @version		1.0.0
  */
 class Eventbrite_Connect {
 	/**
@@ -203,9 +201,37 @@ class Eventbrite_Connect {
 	 * @return	array|false
 	 */
 	private function get_events() {
-		$url = 'https://www.eventbriteapi.com/v3/users/me/events/';
+		$organization_id = $this->get_organization_id();
+		
+		if ( ! $organization_id ) {
+			return false;
+		}
+		
+		$url = 'https://www.eventbriteapi.com/v3/organizations/' . $organization_id . '/events/';
 		
 		return $this->request( $url );
+	}
+	
+	/**
+	 * Get the organization ID.
+	 * 
+	 * @return	int|false The organization ID or false on failure
+	 */
+	private function get_organization_id() {
+		$url = 'https://www.eventbriteapi.com/v3/users/me/organizations/';
+		$response = $this->request( $url );
+		
+		if ( empty( $response->organizations ) ) {
+			return false;
+		}
+		
+		$organization = reset( $response->organizations );
+		
+		if ( ! empty( $organization->id ) ) {
+			return (int) $organization->id;
+		}
+		
+		return false;
 	}
 	
 	/**
