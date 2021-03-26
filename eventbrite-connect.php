@@ -1,5 +1,11 @@
 <?php
 namespace KittMedia\Eventbrite_Connect;
+use function array_pop;
+use function explode;
+use function file_exists;
+use function spl_autoload_register;
+use function str_replace;
+use function strtolower;
 
 /*
 Plugin Name:	Eventbrite Connect
@@ -34,18 +40,18 @@ defined( 'ABSPATH' ) || exit;
  * 
  * @param	string		$class The class name of the auto-loaded class
  */
-\spl_autoload_register( function( $class ) {
-	$path = \explode( '\\', $class );
-	$filename = \str_replace( '_', '-', \strtolower( \array_pop( $path ) ) );
-	$class = \str_replace(
+spl_autoload_register( function( $class ) {
+	$path = explode( '\\', $class );
+	$filename = str_replace( '_', '-', strtolower( array_pop( $path ) ) );
+	$class = str_replace(
 		[ 'kittmedia\eventbrite_connect\\', '\\', '_' ],
 		[ '', '/', '-' ],
-		\strtolower( $class )
+		strtolower( $class )
 	);
-	$class = \str_replace( $filename, 'class-' . $filename, $class );
+	$class = str_replace( $filename, 'class-' . $filename, $class );
 	$maybe_file = __DIR__ . '/inc/' . $class . '.php';
 	
-	if ( \file_exists( $maybe_file ) ) {
+	if ( file_exists( $maybe_file ) ) {
 		require_once( __DIR__ . '/inc/' . $class . '.php' );
 	}
 } );

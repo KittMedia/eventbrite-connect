@@ -1,5 +1,39 @@
 <?php
 namespace KittMedia\Eventbrite_Connect;
+use WP_Query;
+use function add_action;
+use function add_shortcode;
+use function array_merge;
+use function date;
+use function dirname;
+use function error_log;
+use function esc_html__;
+use function file_get_contents;
+use function get_template_part;
+use function is_string;
+use function json_decode;
+use function json_last_error;
+use function load_plugin_textdomain;
+use function ob_get_clean;
+use function ob_start;
+use function plugin_basename;
+use function register_activation_hook;
+use function register_deactivation_hook;
+use function register_post_meta;
+use function register_post_type;
+use function strpos;
+use function strtotime;
+use function unlink;
+use function unserialize;
+use function wp_clear_scheduled_hook;
+use function wp_insert_post;
+use function wp_next_scheduled;
+use function wp_remote_get;
+use function wp_remote_retrieve_body;
+use function wp_schedule_event;
+use function wp_upload_bits;
+use const EVENTBRITE_CONNECT_TOKEN;
+use const PHP_EOL;
 
 /**
  * Get Events from Eventbrite via API to a custom post type.
@@ -28,32 +62,32 @@ class Eventbrite_Connect {
 	 */
 	public final function load() {
 		// hook into cron
-		\add_action( 'eventbrite_connect_hourly_cron_hook', [ $this, 'event_hourly_cron' ] );
+		add_action( 'eventbrite_connect_hourly_cron_hook', [ $this, 'event_hourly_cron' ] );
 		// activate|deactivate cron
-		\register_activation_hook( $this->plugin_file, [ $this, 'hourly_cron_activation' ] );
-		\register_deactivation_hook( $this->plugin_file, [ $this, 'hourly_cron_deactivation' ] );
+		register_activation_hook( $this->plugin_file, [ $this, 'hourly_cron_activation' ] );
+		register_deactivation_hook( $this->plugin_file, [ $this, 'hourly_cron_deactivation' ] );
 		// set textdomain
-		\add_action( 'init', [ $this, 'load_textdomain' ] );
+		add_action( 'init', [ $this, 'load_textdomain' ] );
 		// register post type
-		\add_action( 'init', [ $this, 'register_post_type' ] );
-		\add_action( 'init', [ $this, 'register_post_meta' ] );
+		add_action( 'init', [ $this, 'register_post_type' ] );
+		add_action( 'init', [ $this, 'register_post_meta' ] );
 		// shortcode
-		\add_shortcode( 'eventbrite_connect', [ $this, 'add_shortcode' ] );
+		add_shortcode( 'eventbrite_connect', [ $this, 'add_shortcode' ] );
 	}
 	
 	/**
 	 * Load translations.
 	 */
 	public function load_textdomain() {
-		\load_plugin_textdomain( 'eventbrite-connect', false, \dirname( \plugin_basename( $this->plugin_file ) ) . '/languages' );
+		load_plugin_textdomain( 'eventbrite-connect', false, dirname( plugin_basename( $this->plugin_file ) ) . '/languages' );
 	}
 	
 	/**
 	 * Activate the hourly cron.
 	 */
 	public function hourly_cron_activation() {
-		if ( ! \wp_next_scheduled( 'eventbrite_connect_hourly_cron_hook' ) ) {
-			\wp_schedule_event( time(), 'hourly', 'eventbrite_connect_hourly_cron_hook' );
+		if ( ! wp_next_scheduled( 'eventbrite_connect_hourly_cron_hook' ) ) {
+			wp_schedule_event( time(), 'hourly', 'eventbrite_connect_hourly_cron_hook' );
 		}
 	}
 	
@@ -61,8 +95,8 @@ class Eventbrite_Connect {
 	 * Deactivate the hourly cron.
 	 */
 	public function hourly_cron_deactivation() {
-		if ( \wp_next_scheduled( 'eventbrite_connect_hourly_cron_hook' ) ) {
-			\wp_clear_scheduled_hook( 'eventbrite_connect_hourly_cron_hook' );
+		if ( wp_next_scheduled( 'eventbrite_connect_hourly_cron_hook' ) ) {
+			wp_clear_scheduled_hook( 'eventbrite_connect_hourly_cron_hook' );
 		}
 	}
 	
@@ -83,9 +117,9 @@ class Eventbrite_Connect {
 		foreach ( $results as $result ) {
 			if ( ! isset( $result->meta_value ) ) continue;
 			
-			$image_data = @\unserialize( $result->meta_value );
+			$image_data = @unserialize( $result->meta_value );
 			// delete the actual file
-			\unlink( $image_data['file'] );
+			unlink( $image_data['file'] );
 		}
 		
 		// delete all posts by post type
@@ -107,7 +141,9 @@ class Eventbrite_Connect {
 		$events = $this->get_events();
 		
 		// stop if there are no events
-		if ( $events === false ) return;
+		if ( $events === false ) {
+			return;
+		}
 		
 		// get additional information before deleting old events
 		foreach ( $events->events as &$event ) {
@@ -121,39 +157,38 @@ class Eventbrite_Connect {
 		$this->delete_events();
 		
 		// insert events as custom post type
-		foreach ( $events->events as &$event ) {
+		foreach ( $events->events as $event ) {
 			// store cover image
-			$upload_file = \wp_upload_bits( $event->id . '.jpg', null, \file_get_contents( $event->logo->url ) );
+			$upload_file = wp_upload_bits( $event->id . '.jpg', null, file_get_contents( $event->logo->url ) );
 			$event->_wp_cover = $upload_file;
 			
 			// sorting default
 			$sorting = 99;
 			
 			// get sorting
-			if ( \strpos( $event->name->text, 'Gesamte' ) !== false ) {
-				if ( \strpos( $event->name->text, 'Frühlingsreihe' ) !== false ) {
+			if ( strpos( $event->name->text, 'Gesamte' ) !== false ) {
+				if ( strpos( $event->name->text, 'Frühlingsreihe' ) !== false ) {
 					$sorting = 5;
 				}
-				else if ( \strpos( $event->name->text, 'Pfingstreihe' ) !== false ) {
+				else if ( strpos( $event->name->text, 'Pfingstreihe' ) !== false ) {
 					$sorting = 6;
 				}
-				else if ( \strpos( $event->name->text, 'Sommerreihe' ) !== false ) {
+				else if ( strpos( $event->name->text, 'Sommerreihe' ) !== false ) {
 					$sorting = 7;
 				}
 			}
-			else if ( \strpos( $event->name->text, 'Frühlingsreihe' ) !== false ) {
+			else if ( strpos( $event->name->text, 'Frühlingsreihe' ) !== false ) {
 				$sorting = 1;
 			}
-			else if ( \strpos( $event->name->text, 'Pfingstreihe' ) !== false ) {
+			else if ( strpos( $event->name->text, 'Pfingstreihe' ) !== false ) {
 				$sorting = 2;
 			}
-			else if ( \strpos( $event->name->text, 'Sommerreihe' ) !== false ) {
+			else if ( strpos( $event->name->text, 'Sommerreihe' ) !== false ) {
 				$sorting = 3;
 			}
 			
 			$post_args = [
 				'post_title' => $event->name->text,
-				'post_status' => 'publish',
 				'post_status' => ( $event->status === 'live' ? 'publish' : 'draft' ),
 				'post_type' => 'events',
 				'meta_input' => [
@@ -165,14 +200,14 @@ class Eventbrite_Connect {
 					'eventbrite_event_price_min' => $event->ticket_availability->minimum_ticket_price->major_value,
 					'eventbrite_event_price_currency' => $event->currency,
 					'eventbrite_event_sorting' => $sorting,
-					'eventbrite_event_time' => \date( 'H:i', \strtotime( $event->start->local ) ) . ' – ' . \date( 'H:i', \strtotime( $event->end->local ) ),
-					'eventbrite_event_timestamp' => \strtotime( $event->start->local ),
+					'eventbrite_event_time' => date( 'H:i', strtotime( $event->start->local ) ) . ' – ' . date( 'H:i', strtotime( $event->end->local ) ),
+					'eventbrite_event_timestamp' => strtotime( $event->start->local ),
 					'eventbrite_event_url' => $event->url,
 				],
 			];
 			
 			// add post
-			\wp_insert_post( $post_args );
+			wp_insert_post( $post_args );
 		}
 	}
 	
@@ -190,7 +225,7 @@ class Eventbrite_Connect {
 		// stop here if there is no additional event information
 		if ( $event_information === false ) return $event;
 		
-		$event = (object) \array_merge( (array) $event, (array) $event_information );
+		$event = (object) array_merge( (array) $event, (array) $event_information );
 		
 		return $event;
 	}
@@ -245,22 +280,22 @@ class Eventbrite_Connect {
 			return false;
 		}
 		
-		$request = \wp_remote_get( $url, [
+		$request = wp_remote_get( $url, [
 			'headers' => [
-				'Authorization' => 'Bearer ' . \EVENTBRITE_CONNECT_TOKEN,
+				'Authorization' => 'Bearer ' . EVENTBRITE_CONNECT_TOKEN,
 			],
 		] );
-		$response = \wp_remote_retrieve_body( $request );
+		$response = wp_remote_retrieve_body( $request );
 		
 		// return if response is no valid JSON
 		if ( ! self::is_json( $response ) ) return false;
 		
-		$json = \json_decode( $response );
+		$json = json_decode( $response );
 		
 		// return if response contains errors
 		if ( ! empty( $json->errors ) ) {
-			\error_log( 'Request: ' . $url . \PHP_EOL );
-			\error_log( print_r( $json, true ) );
+			error_log( 'Request: ' . $url . PHP_EOL );
+			error_log( print_r( $json, true ) );
 			
 			return false;
 		}
@@ -275,17 +310,18 @@ class Eventbrite_Connect {
 	 * @return	bool
 	 */
 	protected static function is_json( $string ) {
-		if ( ! \is_string( $string ) ) return false;
+		if ( ! is_string( $string ) ) return false;
 		
-		\json_decode( $string );
+		json_decode( $string );
 		
-		return ( \json_last_error() === JSON_ERROR_NONE );
+		return ( json_last_error() === JSON_ERROR_NONE );
 	}
+	
 	/**
 	 * Register the needed post meta.
 	 */
 	public function register_post_meta() {
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_address',
 			[
@@ -294,7 +330,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_cover',
 			[
@@ -303,7 +339,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_location_name',
 			[
@@ -312,7 +348,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_time',
 			[
@@ -321,7 +357,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_is_free',
 			[
@@ -330,7 +366,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_price_max',
 			[
@@ -339,7 +375,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_price_min',
 			[
@@ -348,7 +384,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_price_currency',
 			[
@@ -357,7 +393,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_sorting',
 			[
@@ -366,7 +402,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_timestamp',
 			[
@@ -375,7 +411,7 @@ class Eventbrite_Connect {
 				'show_in_rest' => true,
 			]
 		);
-		\register_post_meta(
+		register_post_meta(
 			'events',
 			'eventbrite_event_url',
 			[
@@ -392,9 +428,9 @@ class Eventbrite_Connect {
 	public function register_post_type() {
 		$post_type_args = [
 			'labels' => [
-				'name' => \esc_html__( 'Eventbrite events', 'eventbrite-connect' ),
-				'singular_name' => \esc_html__( 'Eventbrite event', 'eventbrite-connect' ),
-				'menu_name' => \esc_html__( 'Eventbrite events', 'eventbrite-connect' ),
+				'name' => esc_html__( 'Eventbrite events', 'eventbrite-connect' ),
+				'singular_name' => esc_html__( 'Eventbrite event', 'eventbrite-connect' ),
+				'menu_name' => esc_html__( 'Eventbrite events', 'eventbrite-connect' ),
 			],
 			'public' => false,
 			'show_ui' => false,
@@ -407,7 +443,7 @@ class Eventbrite_Connect {
 			'capability_type' => 'page',
 		];
 		
-		\register_post_type( 'events', $post_type_args );
+		register_post_type( 'events', $post_type_args );
 	}
 	
 	/**
@@ -427,18 +463,18 @@ class Eventbrite_Connect {
 			'post_status' => 'publish',
 			'post_type' => 'events',
 		];
-		$query = new \WP_Query( $args );
+		$query = new WP_Query( $args );
 		
-		\ob_start();
+		ob_start();
 		echo '<div class="eventbrite-connect-container">';
 		
 		while ( $query->have_posts() ) {
 			$query->the_post();
-			\get_template_part('template-parts/content', 'events' );
+			get_template_part('template-parts/content', 'events' );
 		}
 		
 		echo '</div>';
 		
-		return \ob_get_clean();
+		return ob_get_clean();
 	}
 }
